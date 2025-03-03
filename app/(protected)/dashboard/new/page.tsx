@@ -1,29 +1,37 @@
 // /app/(protected)/dashboard/new/page.tsx
 "use client";
 
-import { createClient } from "@/utils/supabase/client"; // Client-side Supabase
+import { createClient } from "@/utils/supabase/client";
 import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
-import "leaflet/dist/leaflet.css"; // Ensure this is imported
+import L from "leaflet"; // Import Leaflet directly
+import "leaflet/dist/leaflet.css";
 import { Label } from "@/components/ui/label";
+
+// Fix missing marker icons
+delete (L.Icon.Default.prototype as any)._getIconUrl; // Bypass TypeScript issue
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
 const supabase = createClient();
 
-// Default center (replace with your region, e.g., Nairobi: [-1.2921, 36.8219])
-const defaultCenter: [number, number] = [-1.2921, 36.8219];
+const defaultCenter: [number, number] = [-12.8049, 28.2444]; // Replace with your region
 
 export default function AddProperty() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [address, setAddress] = useState("");
-  const [location, setLocation] = useState(defaultCenter); // [lat, lng]
-  const [amenities, setAmenities] = useState<any[]>([]); // Available amenities
+  const [location, setLocation] = useState(defaultCenter);
+  const [amenities, setAmenities] = useState<any[]>([]);
   const [selectedAmenities, setSelectedAmenities] = useState<number[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch amenities on mount
   useEffect(() => {
     async function fetchAmenities() {
       const { data, error } = await supabase.from("amenities").select("*");
@@ -33,7 +41,6 @@ export default function AddProperty() {
     fetchAmenities();
   }, []);
 
-  // Map click handler
   function LocationMarker() {
     useMapEvents({
       click(e) {
@@ -156,12 +163,12 @@ export default function AddProperty() {
       <h3>Location</h3>
       <MapContainer
         center={defaultCenter}
-        zoom={13}
+        zoom={15}
         style={{ height: "400px", width: "100%" }}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
         <LocationMarker />
       </MapContainer>

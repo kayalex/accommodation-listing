@@ -2,8 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 export const updateSession = async (request: NextRequest) => {
-  // This `try/catch` block is only here for the interactive tutorial.
-  // Feel free to remove once you have Supabase connected.
   try {
     // Create an unmodified response
     let response = NextResponse.next({
@@ -22,41 +20,64 @@ export const updateSession = async (request: NextRequest) => {
           },
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value),
+              request.cookies.set(name, value)
             );
             response = NextResponse.next({
               request,
             });
             cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options),
+              response.cookies.set(name, value, options)
             );
           },
         },
-      },
+      }
     );
 
-    // This will refresh session if expired - required for Server Components
-    // https://supabase.com/docs/guides/auth/server-side/nextjs
-    const user = await supabase.auth.getUser();
+    // Refresh session for Server Components
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    // protected routes
-    if (request.nextUrl.pathname.startsWith("/protected") && user.error) {
-      return NextResponse.redirect(new URL("/sign-in", request.url));
+    const pathname = request.nextUrl.pathname;
+
+    // Protect /dashboard and its sub-routes
+    if (pathname.startsWith("/dashboard")) {
+      if (userError || !user) {
+        // Redirect to sign-in if not authenticated
+        return NextResponse.redirect(new URL("/sign-in", request.url));
+      }
+
+      // Fetch user role from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile) {
+        return NextResponse.redirect(new URL("/sign-in", request.url));
+      }
+
+      // Restrict /dashboard/new to landlords only
+      if (pathname === "/dashboard/new" && profile.role !== "landlord") {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
 
-    if (request.nextUrl.pathname === "/" && !user.error) {
-      return NextResponse.redirect(new URL("/protected", request.url));
-    }
-
+    // Allow all other routes (e.g., /, /properties, /sign-in, /sign-up, /forgot-password)
     return response;
   } catch (e) {
-    // If you are here, a Supabase client could not be created!
-    // This is likely because you have not set up environment variables.
-    // Check out http://localhost:3000 for Next Steps.
+    // Fallback if Supabase client fails
     return NextResponse.next({
       request: {
         headers: request.headers,
       },
     });
   }
+};
+
+// Define which routes to protect
+export const config = {
+  matcher: ["/dashboard/:path*"],
 };

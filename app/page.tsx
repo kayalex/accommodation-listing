@@ -3,11 +3,11 @@ import PropertyGrid from "@/components/PropertyGrid";
 import Link from "next/link";
 
 export default async function Home() {
-  const supabase = await createClient();
+  const supabase = createClient();
 
   // Fetch latest property listings
   const { data: properties } = await supabase
-    .from("properties")
+    .from("listings")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(6);
@@ -30,7 +30,7 @@ export default async function Home() {
             Browse Listings
           </Link>
           <Link
-            href="/properties/new"
+            href=""
             className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-primary/10 hover:bg-primary/20"
           >
             List Your Property

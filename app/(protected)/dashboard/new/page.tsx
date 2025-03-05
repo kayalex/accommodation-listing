@@ -3,23 +3,10 @@
 
 import { createClient } from "@/utils/supabase/client";
 import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
-import L from "leaflet"; // Import Leaflet directly
-import "leaflet/dist/leaflet.css";
-import { Label } from "@/components/ui/label";
-
-// Fix missing marker icons
-delete (L.Icon.Default.prototype as any)._getIconUrl; // Bypass TypeScript issue
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+import PropertyMapInput from "./PropertyMapInput";
 
 const supabase = createClient();
-
-const defaultCenter: [number, number] = [-12.8049, 28.2444]; // Replace with your region
+const defaultCenter: [number, number] = [-12.80532, 28.24403]; // Replace with your coordinates
 
 export default function AddProperty() {
   const [title, setTitle] = useState("");
@@ -31,6 +18,7 @@ export default function AddProperty() {
   const [selectedAmenities, setSelectedAmenities] = useState<number[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchAmenities() {
@@ -41,37 +29,24 @@ export default function AddProperty() {
     fetchAmenities();
   }, []);
 
-  function LocationMarker() {
-    useMapEvents({
-      click(e) {
-        setLocation([e.latlng.lat, e.latlng.lng]);
-      },
-    });
-    return (
-      <Marker
-        position={location}
-        draggable={true}
-        eventHandlers={{
-          dragend: (e) => {
-            const marker = e.target;
-            const position = marker.getLatLng();
-            setLocation([position.lat, position.lng]);
-          },
-        }}
-      />
-    );
-  }
+  const sanitizeFileName = (name: string) => {
+    return name
+      .replace(/[^a-zA-Z0-9.-]/g, "_")
+      .replace(/_+/g, "_")
+      .toLowerCase();
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
     if (authError || !user) {
-      alert("You must be logged in as a landlord.");
+      setError("You must be logged in as a landlord.");
       setLoading(false);
       return;
     }
@@ -90,8 +65,7 @@ export default function AddProperty() {
       .select()
       .single();
     if (propertyError) {
-      console.error(propertyError);
-      alert("Error adding property.");
+      setError("Error adding property: " + propertyError.message);
       setLoading(false);
       return;
     }
@@ -103,32 +77,72 @@ export default function AddProperty() {
     const { error: amenityError } = await supabase
       .from("property_amenities")
       .insert(amenityInserts);
-    if (amenityError) console.error(amenityError);
+    if (amenityError) {
+      setError("Error adding amenities: " + amenityError.message);
+      setLoading(false);
+      return;
+    }
 
-    for (const image of images) {
-      const fileName = `${property.id}/${Date.now()}-${image.name}`;
+    if (images.length === 0) {
+      setError("Please upload at least one image.");
+      setLoading(false);
+      return;
+    }
+
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      if (!image.type.startsWith("image/")) {
+        setError("Only image files are allowed.");
+        setLoading(false);
+        return;
+      }
+      if (image.size > 5 * 1024 * 1024) {
+        setError("Image size must be less than 5MB.");
+        setLoading(false);
+        return;
+      }
+
+      const sanitizedName = sanitizeFileName(image.name);
+      const fileName = `${property.id}/${Date.now()}-${sanitizedName}`;
       const { error: uploadError } = await supabase.storage
         .from("properties")
-        .upload(fileName, image);
+        .upload(fileName, image, { upsert: true });
       if (uploadError) {
-        console.error(uploadError);
-        continue;
+        setError("Error uploading image: " + uploadError.message);
+        setLoading(false);
+        return;
       }
-      await supabase.from("property_images").insert({
-        property_id: property.id,
-        storage_path: fileName,
-        is_primary: images.indexOf(image) === 0,
-      });
+
+      const { error: imageError } = await supabase
+        .from("property_images")
+        .insert({
+          property_id: property.id,
+          storage_path: fileName,
+          is_primary: i === 0,
+        });
+      if (imageError) {
+        setError("Error saving image metadata: " + imageError.message);
+        setLoading(false);
+        return;
+      }
     }
 
     alert("Property added successfully!");
     setLoading(false);
+    setTitle("");
+    setDescription("");
+    setPrice("");
+    setAddress("");
+    setLocation(defaultCenter);
+    setSelectedAmenities([]);
+    setImages([]);
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-4">
       <h1 className="text-2xl font-medium">Add New Property</h1>
-      <Label htmlFor="title">Title</Label>
+      {error && <p className="text-red-500">{error}</p>}
+      <label htmlFor="title">Title</label>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -136,14 +150,14 @@ export default function AddProperty() {
         required
         className="border p-2"
       />
-      <Label htmlFor="description">Description</Label>
+      <label htmlFor="description">Description</label>
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description"
         className="border p-2"
       />
-      <Label htmlFor="price">Price</Label>
+      <label htmlFor="price">Price</label>
       <input
         type="number"
         value={price}
@@ -152,7 +166,7 @@ export default function AddProperty() {
         required
         className="border p-2"
       />
-      <Label htmlFor="address">Address (optional)</Label>
+      <label htmlFor="address">Address (optional)</label>
       <input
         value={address}
         onChange={(e) => setAddress(e.target.value)}
@@ -161,21 +175,14 @@ export default function AddProperty() {
       />
 
       <h3>Location</h3>
-      <MapContainer
-        center={defaultCenter}
-        zoom={15}
-        style={{ height: "400px", width: "100%" }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        <LocationMarker />
-      </MapContainer>
+      <PropertyMapInput
+        defaultCenter={defaultCenter}
+        onLocationChange={setLocation}
+      />
       <p>Click or drag the marker to set the location.</p>
 
       <h3>Amenities</h3>
-      {amenities.map((amenity: any) => (
+      {amenities.map((amenity) => (
         <label key={amenity.id} className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -194,13 +201,27 @@ export default function AddProperty() {
         </label>
       ))}
 
-      <Label htmlFor="images">Images</Label>
+      <label htmlFor="images">Images (at least one required)</label>
       <input
         type="file"
         multiple
         accept="image/*"
         onChange={(e) => setImages(Array.from(e.target.files || []))}
+        className="border p-2"
       />
+      {images.length > 0 && (
+        <div>
+          <p>Selected images:</p>
+          <ul>
+            {images.map((img, index) => (
+              <li key={index}>
+                {img.name} {index === 0 ? "(Primary)" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <button
         type="submit"
         disabled={loading}

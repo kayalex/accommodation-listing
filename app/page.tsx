@@ -30,7 +30,7 @@ export default async function Home() {
             Browse Listings
           </Link>
           <Link
-            href=""
+            href="/dashboard/new"
             className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-primary/10 hover:bg-primary/20"
           >
             List Your Property

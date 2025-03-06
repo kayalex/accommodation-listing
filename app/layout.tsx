@@ -49,7 +49,7 @@ export default function RootLayout({
                     Browse Listings
                   </Link>
                   <Link
-                    href="/properties/new"
+                    href="/dashboard/new"
                     className="transition-colors hover:text-foreground/80 text-foreground/60"
                   >
                     List Property

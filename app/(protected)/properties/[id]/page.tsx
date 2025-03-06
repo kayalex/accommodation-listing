@@ -1,9 +1,8 @@
-// /app/(protected)/properties/[id]/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import PropertyMapWrapper from "./PropertyMapWrapper"; // New Client Component wrapper
+import PropertyMapWrapper from "./PropertyMapWrapper";
 
 export default async function PropertyPage({
   params,
@@ -30,14 +29,15 @@ export default async function PropertyPage({
     return notFound();
   }
 
-  const primaryImage = property.property_images.find(
-    (img: any) => img.is_primary
+  // Sort images with primary first and generate URLs
+  const sortedImages = property.property_images.sort(
+    (a: any, b: any) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0)
   );
-  const imageUrl = primaryImage
-    ? supabase.storage
-        .from("properties")
-        .getPublicUrl(primaryImage.storage_path).data.publicUrl
-    : "https://via.placeholder.com/800x400";
+  const imageUrls = sortedImages.map(
+    (img: any) =>
+      supabase.storage.from("properties").getPublicUrl(img.storage_path).data
+        .publicUrl
+  );
   const amenities = property.property_amenities.map(
     (pa: any) => pa.amenities.name
   );
@@ -51,14 +51,36 @@ export default async function PropertyPage({
         </Link>
       </div>
 
+      {/* Image Gallery */}
       <div className="my-6">
-        <img
-          src={imageUrl}
-          alt={property.title}
-          width={800}
-          height={400}
-          className="rounded-lg w-full h-auto object-cover"
-        />
+        {imageUrls.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {imageUrls.map((url: string, index: number) => (
+              <div key={index} className="relative">
+                <img
+                  src={url}
+                  alt={`${property.title} - Image ${index + 1}`}
+                  width={300}
+                  height={200}
+                  className="rounded-lg w-full h-auto object-cover"
+                />
+                {sortedImages[index].is_primary && (
+                  <span className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">
+                    Primary
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <img
+            src="https://via.placeholder.com/800x400"
+            alt="No images available"
+            width={800}
+            height={400}
+            className="rounded-lg w-full h-auto object-cover"
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

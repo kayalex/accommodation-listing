@@ -22,7 +22,7 @@ export default function PropertiesPage() {
     type: "",
   });
 
-  // Fetch properties from Supabase
+  // Fetch properties and their primary images from Supabase
   useEffect(() => {
     async function fetchProperties() {
       let query = supabase
@@ -30,36 +30,68 @@ export default function PropertiesPage() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      // Apply filters
+      // Apply filters if set
       if (filters.location) query = query.eq("location", filters.location);
-      if (filters.type) query = query.eq("type", filters.type);
+      if (filters.type && filters.type !== "all")
+        query = query.eq("type", filters.type);
       if (filters.priceMin) query = query.gte("price", filters.priceMin);
       if (filters.priceMax) query = query.lte("price", filters.priceMax);
 
-      const { data } = await query;
-      setProperties(data || []);
-    }
+      const { data: propertiesData, error: propertiesError } = await query;
+      if (propertiesError) {
+        console.error("Error fetching properties:", propertiesError.message);
+        return;
+      }
 
+      if (propertiesData && propertiesData.length > 0) {
+        const propertyIds = propertiesData.map((p) => p.id);
+
+        // Get primary images for all properties
+        const { data: imagesData, error: imageError } = await supabase
+          .from("property_images")
+          .select("property_id, storage_path")
+          .in("property_id", propertyIds)
+          .eq("is_primary", true);
+
+        if (imageError) {
+          console.error("Error fetching images:", imageError.message);
+        }
+
+        const propertiesWithImages = propertiesData.map((property) => {
+          // Ensure both IDs are strings for comparison
+          const primaryImage = imagesData?.find(
+            (img) => String(img.property_id) === String(property.id)
+          );
+          console.log(property, imagesData);
+          let publicUrl = "/placeholder.svg"; // fallback image
+
+          if (primaryImage) {
+            // getPublicUrl returns an object with a data property
+            const { data: publicUrlData } = supabase.storage
+              .from("properties")
+              .getPublicUrl(primaryImage.storage_path);
+
+            if (!publicUrlData) {
+              console.error("Error getting public URL");
+            } else {
+              publicUrl = publicUrlData.publicUrl;
+            }
+          }
+
+          return {
+            ...property,
+            image_url: publicUrl,
+          };
+        });
+        setProperties(propertiesWithImages);
+      } else {
+        setProperties([]);
+      }
+    }
     fetchProperties();
   }, [filters]);
 
   // Handle filter changes
-  interface Filters {
-    location: string;
-    priceMin: string;
-    priceMax: string;
-    type: string;
-  }
-
-  interface Property {
-    id: string;
-    location: string;
-    price: number;
-    type: string;
-    created_at: string;
-    // Add other property fields as needed
-  }
-
   function handleFilterChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {

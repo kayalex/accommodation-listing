@@ -12,7 +12,7 @@ export default function PropertyCard({ property }: { property: Property }) {
   return (
     <div className="border rounded-lg overflow-hidden shadow-lg bg-white">
       <img
-        src={property.image_url || "/placeholder.jpg"}
+        src={property.image_url || "/placeholder.jpg"} // Ensure correct key
         alt={property.title}
         className="w-full h-48 object-cover"
       />
